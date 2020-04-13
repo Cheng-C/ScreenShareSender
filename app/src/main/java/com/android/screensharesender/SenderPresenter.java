@@ -1,8 +1,11 @@
 package com.android.screensharesender;
 
 import android.annotation.SuppressLint;
+import android.content.Intent;
+import android.media.projection.MediaProjectionManager;
 import android.os.Handler;
 import android.os.Message;
+import android.util.Log;
 
 import androidx.annotation.NonNull;
 
@@ -22,18 +25,24 @@ import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
+import static android.content.Context.MEDIA_PROJECTION_SERVICE;
+
 public class SenderPresenter extends BasePresenter<SenderContract.IView> implements SenderContract.IPresenter {
 
+    private static final String TAG = "SenderPresenter";
     private static final int MESSAGE_UPDATE_TEXT_VIEW = 0;
     private static final int MESSAGE_UPDATE_UI = 1;
     private static final int PORT = 9988;
-    private String HOST = "172.18.141.183";
+    private String HOST = "192.168.100.5";
     private Socket socket;
     private String data;
     private PrintWriter printWriter;
     private BufferedReader bufferedReader;
     private ExecutorService executorService = null;
-    private boolean canReceive = false;
+    boolean canReceive = false;
+
+    private MediaProjectionManager mMediaProjectionManager;
+    private ScreenRecorder recorder;
 
     public SenderPresenter() {
         initThreadPool();
@@ -63,12 +72,22 @@ public class SenderPresenter extends BasePresenter<SenderContract.IView> impleme
 
     @Override
     public void onDisconnect() {
-        startSending("客户端断开连接");
+        startSending("#客户端断开连接");
     }
 
     @Override
     public void onSendMessage(final String message) {
         startSending(message);
+    }
+
+    @Override
+    public void onSetUpMediaProjection() {
+
+    }
+
+    @Override
+    public void onSetUpVirtualDisplay() {
+
     }
 
     private void initThreadPool() {
@@ -86,8 +105,15 @@ public class SenderPresenter extends BasePresenter<SenderContract.IView> impleme
             @Override
             public void run() {
                 try {
+                    if (socket != null) {
+                        return;
+                    }
                     socket = new Socket(HOST, PORT);
-                    socket.setSoTimeout(60 * 1000);
+                    socket.setSoTimeout(6 * 1000);
+                    if (socket == null) {
+                        return;
+                    }
+
                     data = getData(); // 获取数据
                     printWriter = new PrintWriter(new BufferedWriter(new OutputStreamWriter(
                             socket.getOutputStream(), "UTF-8")), true);
@@ -116,6 +142,14 @@ public class SenderPresenter extends BasePresenter<SenderContract.IView> impleme
                             handlerMessage.what = MESSAGE_UPDATE_TEXT_VIEW;
                             handlerMessage.obj = message;
                             handlerMessage.sendToTarget();
+                            if (message.equals("#服务端断开连接")) {
+                                Log.i(TAG, "服务端断开连接");
+                                release();
+                            }
+                            if (message.equals("#客户端断开连接")) {
+                                Log.i(TAG, "客户端断开连接");
+                                release();
+                            }
                             message = null;
                         }
                     } catch (IOException e) {
@@ -133,18 +167,22 @@ public class SenderPresenter extends BasePresenter<SenderContract.IView> impleme
                 if (printWriter != null) {
                     printWriter.println(message);
                 }
-                if (message.equals("客户端断开连接")) {
-                    release();
-                }
             }
         });
     }
 
     private void release() {
         try {
-            socket.close();
-            printWriter.close();
-            bufferedReader.close();
+            if (socket != null) {
+                socket.close();
+                socket = null;
+            }
+            if (printWriter != null) {
+                printWriter.close();
+                bufferedReader.close();
+                printWriter = null;
+                bufferedReader = null;
+            }
             canReceive = false;
         } catch (IOException e) {
             e.printStackTrace();

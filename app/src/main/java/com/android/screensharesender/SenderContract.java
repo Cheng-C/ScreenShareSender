@@ -9,6 +9,8 @@ public class SenderContract {
         void onConnect();
         void onDisconnect();
         void onSendMessage(String message);
+        void onSetUpMediaProjection();
+        void onSetUpVirtualDisplay();
     }
 
     public interface IView extends IBaseView {
