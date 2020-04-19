@@ -5,38 +5,25 @@ import android.content.Intent;
 import android.media.projection.MediaProjection;
 import android.media.projection.MediaProjectionManager;
 import android.os.Bundle;
-import android.os.Environment;
-import android.util.Log;
-import android.view.Surface;
-import android.view.SurfaceView;
 import android.view.View;
 import android.widget.Button;
-import android.widget.EditText;
-import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.annotation.Nullable;
 
 import com.android.screensharesender.common.base.BaseMvpActivity;
 
-import java.io.File;
-
 public class SenderActivity extends BaseMvpActivity<SenderContract.IPresenter> implements SenderContract.IView {
 
     private static final String TAG = "SenderActivity";
-    private static final int REQUEST_MEDIA_PROJECTION = 1;
+    private static final int REQUEST_SCREEN_SHARE = 1;
 
-    private Surface surface;
-    private SurfaceView surfaceView;
     private MediaProjectionManager mediaProjectionManager;
-    private ScreenRecorder recorder;
+    private MediaProjection mediaProjection;
 
     private Button connectButton;
     private Button disconnectButton;
-    private EditText messageEditText;
-    private Button sendButton;
-    private TextView recordTextView;
-    private Button recordButton;
+    private Button screenShareButton;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -48,42 +35,27 @@ public class SenderActivity extends BaseMvpActivity<SenderContract.IPresenter> i
         connectButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                presenter.onConnect();
+                if (connectButton.getText().equals("连接")) {
+                    presenter.connect();
+                } else {
+                    presenter.disconnect();
+                }
             }
         });
 
-        disconnectButton = findViewById(R.id.btnDisconnect);
-        disconnectButton.setOnClickListener(new View.OnClickListener() {
+        screenShareButton = findViewById(R.id.btnScreenShare);
+        screenShareButton.setVisibility(View.INVISIBLE);
+        screenShareButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                presenter.onDisconnect();
-            }
-        });
-
-        messageEditText = findViewById(R.id.etMessage);
-
-        sendButton = findViewById(R.id.btnSend);
-        sendButton.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                String message = messageEditText.getText().toString();
-                presenter.onSendMessage(message);
-            }
-        });
-
-        recordTextView = findViewById(R.id.tvRecord);
-
-        recordButton = findViewById(R.id.btnRecord);
-        recordButton.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-                if (recorder != null) {
-                    recorder.quit();
-                    recorder = null;
-                    recordButton.setText("录屏");
+                if (mediaProjection != null) {
+                   presenter.stopScreenShare();
+                   mediaProjection.stop();
+                   mediaProjection = null;
+                   screenShareButton.setText("传屏");
                 } else {
                     Intent captureIntent = mediaProjectionManager.createScreenCaptureIntent();
-                    startActivityForResult(captureIntent, REQUEST_MEDIA_PROJECTION);
+                    startActivityForResult(captureIntent, REQUEST_SCREEN_SHARE);
                 }
             }
         });
@@ -93,39 +65,27 @@ public class SenderActivity extends BaseMvpActivity<SenderContract.IPresenter> i
     protected void onPause() {
         super.onPause();
         if (isFinishing()) {
-            presenter.onDisconnect();
-        }
-    }
-
-    @Override
-    protected void onDestroy() {
-        super.onDestroy();
-        Log.i(TAG, "onDestroy: 执行");
-        if(recorder != null){
-            recorder.quit();
-            recorder = null;
+            // 如果应用退出
+            presenter.stopScreenShare();
+            presenter.disconnect();
         }
     }
 
     @Override
     protected void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
-        MediaProjection mediaProjection = mediaProjectionManager.getMediaProjection(resultCode, data);
-        if (mediaProjection == null) {
-            Log.e(TAG, "mediaProjection为空");
-            return;
+        if (requestCode == REQUEST_SCREEN_SHARE) {
+            if (resultCode != RESULT_OK) {
+                Toast.makeText(this, "未获取录屏权限", Toast.LENGTH_SHORT).show();
+                return;
+            }
+            mediaProjection = mediaProjectionManager.getMediaProjection(resultCode, data);
+
+            Toast.makeText(this, "正在传屏...", Toast.LENGTH_SHORT).show();
+
+            presenter.startScreenShare(mediaProjection);
+            screenShareButton.setText("停止传屏");
         }
-        // video size
-        final int width = 1280;
-        final int height = 1920;
-        File file = new File(new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES),
-                "Screenshots"),
-                "record-" + width + "x" + height + "-" + System.currentTimeMillis() + ".mp4");
-        final int bitrate = 6000000;
-        recorder = new ScreenRecorder(width, height, bitrate, 1, mediaProjection, file.getAbsolutePath());
-        recorder.start();
-        recordButton.setText("停止录屏");
-        Toast.makeText(this, "正在录屏...", Toast.LENGTH_SHORT).show();
     }
 
     @Override
@@ -134,12 +94,16 @@ public class SenderActivity extends BaseMvpActivity<SenderContract.IPresenter> i
     }
 
     @Override
-    public void updateUI() {
-
+    public void onConnectSuccess() {
+        Toast.makeText(this, "连接成功", Toast.LENGTH_SHORT).show();
+        screenShareButton.setVisibility(View.VISIBLE);
+        connectButton.setText("断开连接");
     }
 
     @Override
-    public void updateTextView(String message) {
-        recordTextView.append(message + "\n");
+    public void onDisconnectSuccess() {
+        Toast.makeText(this, "断开连接成功", Toast.LENGTH_SHORT).show();
+        screenShareButton.setVisibility(View.INVISIBLE);
+        connectButton.setText("连接");
     }
 }
