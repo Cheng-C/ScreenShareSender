@@ -2,6 +2,8 @@ package com.android.screensharesender.connection;
 
 import android.util.Log;
 
+import com.android.screensharesender.utils.ByteUtils;
+
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -54,20 +56,17 @@ public class TcpConnection {
         void onTcpDisconnectFail(String message);
     }
 
-    public void setTcpConnectListener(TcpConnectListener tcpConnectListener) {
-        this.tcpConnectListener = tcpConnectListener;
-    }
-
-    public void setTcpDisconnectListener(TcpDisconnectListener tcpDisconnectListener) {
-        this.tcpDisconnectListener = tcpDisconnectListener;
-    }
-
     public void connect(String ip, int port, TcpConnectListener tcpConnectListener) {
         try {
             if (socket != null) {
                 return;
             }
             socket = new Socket(ip, port);
+            Log.i(TAG, "connect: 连接成功socket.isConnected()" + socket.isConnected());
+            Log.i(TAG, "connect: 连接成功socket.isBound()" + socket.isBound());
+            Log.i(TAG, "connect: 连接成功socket.isClosed()" + socket.isClosed());
+            Log.i(TAG, "connect: 连接成功socket.isInputShutdown()" + socket.isInputShutdown());
+            Log.i(TAG, "connect: 连接成功socket.isOutputShutdown()" + socket.isOutputShutdown());
 
             // read阻塞时间（超过时间抛出异常）
             socket.setSoTimeout(60 * 1000);
@@ -105,10 +104,22 @@ public class TcpConnection {
             if (socket == null) {
                 return;
             }
-            socket.close();
-            socket = null;
-            if (tcpDisconnectListener != null) {
-                tcpDisconnectListener.onTcpDisconnectSuccess();
+            socket.shutdownOutput();
+            // 接收端关闭socket
+            byte[] bytes = new byte[4];
+            Log.i(TAG, "disconnect");
+
+            if (inputStream.read(bytes) == -1) {
+                Log.i(TAG, "disconnect: read-1");
+                // socket.shutdownInput();
+                socket.close();
+                Log.i(TAG, "disconnect: " + socket.isConnected() + socket.isClosed());
+                socket = null;
+                if (tcpDisconnectListener != null) {
+                    tcpDisconnectListener.onTcpDisconnectSuccess();
+                }
+            } else {
+                Log.i(TAG, "disconnect: message" + ByteUtils.bytesToInt(bytes));
             }
         } catch (IOException e) {
             if (tcpDisconnectListener != null) {
@@ -117,24 +128,6 @@ public class TcpConnection {
             e.printStackTrace();
         }
     }
-
-//    // TODO
-//    public void startReceiving() {
-//        canReceive = true;
-//        byte[] bytes = new byte[1024];
-//        while (canReceive) {
-//            try {
-//                int length = inputStream.read(bytes);
-//            } catch (IOException e) {
-//                // 与接收端连接断开
-//                canReceive = false;
-//                if (tcpConnectListener != null) {
-//                    tcpConnectListener.onSocketDisconnect(e.getMessage());
-//                }
-//                e.printStackTrace();
-//            }
-//        }
-//    }
 
     public void sendData(byte[] data) {
         try {
@@ -150,25 +143,5 @@ public class TcpConnection {
             e.printStackTrace();
         }
     }
-
-//    public void release() {
-//        try {
-//            if (socket != null) {
-//                socket.close();
-//                socket = null;
-//            }
-//            if (outputStream != null) {
-//                outputStream.close();
-//                outputStream = null;
-//            }
-//            if (inputStream != null) {
-//                inputStream.close();
-//                inputStream = null;
-//            }
-//            canReceive = false;
-//        } catch (IOException e) {
-//            e.printStackTrace();
-//        }
-//    }
 
 }

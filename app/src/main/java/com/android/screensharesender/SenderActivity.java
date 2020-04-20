@@ -104,6 +104,12 @@ public class SenderActivity extends BaseMvpActivity<SenderContract.IPresenter> i
     public void onDisconnectSuccess() {
         Toast.makeText(this, "断开连接成功", Toast.LENGTH_SHORT).show();
         screenShareButton.setVisibility(View.INVISIBLE);
+        if (mediaProjection != null) {
+            presenter.stopScreenShare();
+            mediaProjection.stop();
+            mediaProjection = null;
+            screenShareButton.setText("传屏");
+        }
         connectButton.setText("连接");
     }
 }
